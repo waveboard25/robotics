@@ -1,0 +1,19 @@
+tick_hz: 10
+reservation_horizon: 20
+battery_threshold: 20.0
+battery_drain_per_tick: 0.01
+robot_radius: 0.4
+max_speed: 1.0
+
+priority_weights:
+  urgency: 1.0
+  inverse_dist: 0.5
+  wait_aging: 0.3
+
+cost_weights:
+  distance: 1.0
+  congestion: 0.8
+  battery: 2.0
+  workload: 0.5
+  risk: 1.2
+  proximity: 0.4

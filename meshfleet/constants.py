@@ -1,0 +1,29 @@
+"""Shared constants for MeshFleet."""
+
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+BROADCAST_PORT = 5000
+STALE_THRESHOLD = 0.6  # seconds
+HEARTBEAT_HZ = 10
+TICK_DT = 1.0 / HEARTBEAT_HZ
+RESERVATION_HORIZON = 20
+ROBOT_RADIUS = 0.4
+MAX_SPEED = 1.0
+
+# Priority weights
+W_URGENCY = 1.0
+W_INVERSE_DIST = 0.5
+W_WAIT_AGING = 0.3
+
+# Task cost weights
+COST_W1_DISTANCE = 1.0
+COST_W2_CONGESTION = 0.8
+COST_W3_BATTERY = 2.0
+COST_W4_WORKLOAD = 0.5
+COST_W5_RISK = 1.2
+COST_W6_PROXIMITY = 0.4
+
+BATTERY_THRESHOLD = 20.0
+BATTERY_DRAIN_PER_TICK = 0.01
