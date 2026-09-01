@@ -78,12 +78,9 @@ def space_time_astar(
                 state = came_from[state]
                 path.append((state[0], state[1]))
             path.reverse()
-            # Deduplicate consecutive same cells from waiting
-            deduped = [path[0]]
-            for p in path[1:]:
-                if p != deduped[-1]:
-                    deduped.append(p)
-            return deduped
+            # Keep wait cells.  Removing them makes a time-aware plan unsafe: a
+            # caller would execute its later moves one tick too early.
+            return path
 
         if g > g_score.get(state, float("inf")):
             continue

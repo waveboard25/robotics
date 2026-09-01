@@ -1,0 +1,31 @@
+name: failure-and-aisle-blockage-demo
+map: configs/warehouse_layouts/default.yaml
+max_ticks: 350
+robots:
+  - id: R1
+    spawn: [1, 3]
+  - id: R2
+    spawn: [1, 7]
+  - id: R3
+    spawn: [18, 7]
+tasks:
+  - id: T1
+    pickup: [1, 3]
+    dropoff: [18, 11]
+    urgency: 1.0
+  - id: T2
+    pickup: [1, 7]
+    dropoff: [18, 5]
+    urgency: 1.5
+  - id: T3
+    pickup: [18, 3]
+    dropoff: [1, 11]
+    urgency: 1.2
+events:
+  - type: block_aisle
+    at_tick: 25
+    aisle_id: aisle_4
+    cells: [[8, 5], [9, 5], [10, 5], [11, 5]]
+  - type: robot_failure
+    at_tick: 5
+    robot_id: R2

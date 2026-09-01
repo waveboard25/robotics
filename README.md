@@ -20,12 +20,8 @@ python -m robots.robot_node --id R1 --spawn-x 1 --spawn-y 1
 # Run tests
 pytest tests/ -v
 
-# Benchmark baseline vs proposed
-python -m benchmarking.run_baseline --scenario configs/scenarios/scenario_03.yaml --trials 10
-python -m benchmarking.run_proposed --scenario configs/scenarios/scenario_03.yaml --trials 10
-
-# Dashboard (read-only)
-streamlit run dashboard/streamlit_app.py
+# Benchmark baseline vs proposed (writes one row per trial and algorithm)
+python -m benchmarking.run_benchmark --scenario configs/scenarios/scenario_03.yaml --trials 10
 ```
 
 ## Architecture
@@ -35,7 +31,7 @@ streamlit run dashboard/streamlit_app.py
 - **Safety**: ORCA local collision avoidance
 - **Tasks**: decentralized auction (Contract Net Protocol)
 - **Comms**: UDP broadcast JSON (no broker)
-- **Dashboard**: optional read-only subscriber
+- **Evaluation**: deterministic digital-twin simulator, fault scenarios, and CSV metrics
 
 ## Docker
 
