@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MeshFleet / Operations</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MESHFLEET / CONTROL ROOM</p>
+          <h1>Fleet operations</h1>
+          <p id="scenario" class="muted">Connecting to telemetry...</p>
+        </div>
+        <div class="connection"><span id="connection-dot"></span><span id="connection-text">CONNECTING</span></div>
+      </header>
+
+      <section class="kpis" aria-label="Fleet summary">
+        <article><span>Online robots</span><strong id="online">0</strong><small id="online-detail">waiting for telemetry</small></article>
+        <article><span>Average battery</span><strong id="battery">—</strong><small>fleet remaining</small></article>
+        <article><span>Active tasks</span><strong id="active-tasks">0</strong><small id="task-detail">queued tasks</small></article>
+        <article><span>Simulation tick</span><strong id="tick">0</strong><small>latest peer heartbeat</small></article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel map-panel">
+          <div class="panel-heading"><div><p class="eyebrow">LIVE MAP</p><h2>Warehouse floor</h2></div><span id="map-size" class="badge">—</span></div>
+          <div id="map" class="map" role="img" aria-label="Warehouse map"></div>
+          <div class="legend"><span><i class="dot robot-dot"></i>Robot</span><span><i class="dot blocked-dot"></i>Blocked</span><span><i class="dot charge-dot"></i>Charge</span><span><i class="dot task-dot"></i>Task</span></div>
+        </article>
+
+        <aside class="panel fleet-panel">
+          <div class="panel-heading"><div><p class="eyebrow">FLEET STATUS</p><h2>Robots</h2></div><span id="robot-count" class="badge">0 units</span></div>
+          <div id="robot-list" class="robot-list"><div class="empty">No robot telemetry received yet.</div></div>
+        </aside>
+      </section>
+
+      <section class="bottom-grid">
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">WORK QUEUE</p><h2>Tasks</h2></div></div>
+          <div id="task-list" class="task-list"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">SYSTEM EVENTS</p><h2>Scenario timeline</h2></div></div>
+          <div id="event-list" class="event-list"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

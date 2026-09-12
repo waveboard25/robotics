@@ -4,6 +4,28 @@ Decentralized edge-AI fleet coordination for warehouse AMRs (SIH26123).
 
 Each robot runs as an independent OS process communicating over UDP broadcast with no central decision server. Coordination uses space-time A* with reservation tables, ORCA local avoidance, priority-based conflict resolution, and Contract Net Protocol task allocation.
 
+## Browser dashboard
+
+The dashboard listens to the same UDP telemetry as the visualizer and presents a
+live warehouse map, robot locations and status, battery levels, task assignments,
+and scenario events in a browser.
+
+Start it in one terminal:
+
+```bash
+python -m dashboard.app --scenario configs/scenarios/scenario_03.yaml
+```
+
+Then open <http://127.0.0.1:8000>. In another terminal, start the scenario:
+
+```bash
+python -m simulation.scenarios.runner --scenario configs/scenarios/scenario_03.yaml
+```
+
+The dashboard API is available at `/api/state`, and the live browser stream uses
+the `/ws` WebSocket endpoint. The default UDP port is `5000`; override it with
+`--udp-port` when running a fleet on another port.
+
 ## Quick Start
 
 ```bash
