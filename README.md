@@ -1,6 +1,6 @@
 # MeshFleet
 
-Decentralized edge-AI fleet coordination for warehouse AMRs (SIH26123).
+Decentralized edge-AI fleet coordination for warehouse AMRs.
 
 Each robot runs as an independent OS process communicating over UDP broadcast with no central decision server. Coordination uses space-time A* with reservation tables, ORCA local avoidance, priority-based conflict resolution, and Contract Net Protocol task allocation.
 
