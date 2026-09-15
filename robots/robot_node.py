@@ -141,8 +141,18 @@ class RobotNode:
 
             elif msg.msg_type == MessageType.AISLE_BLOCKED:
                 p = msg.payload
-                self.blocked_aisles.add(p["aisle_id"])
-                cells = [tuple(c) for c in p["cells"]]
+                aisle_id = p.get("aisle_id")
+                if not aisle_id:
+                    self.log.warning("Ignoring aisle block without aisle_id")
+                    continue
+                self.blocked_aisles.add(aisle_id)
+                cells = [tuple(c) for c in p.get("cells", [])]
+                if not cells:
+                    cells = list(self.grid.aisle_labels.get(aisle_id, []))
+                cells = [
+                    cell for cell in cells
+                    if len(cell) == 2 and self.grid.in_bounds(cell[0], cell[1])
+                ]
                 self.grid.block_cells(cells)
                 if self.active_task and self._path_crosses_blocked():
                     self._replan()
@@ -180,6 +190,10 @@ class RobotNode:
             self.state.reservation_horizon_id = self.reservations.horizon_id
             self.state.next_waypoints = self.path[1 : RESERVATION_HORIZON]
             self.log.info("Replanned to %s via %d cells", goal, len(self.path))
+        else:
+            self.reservations.release_robot(self.robot_id)
+            self.state.next_waypoints = []
+            self.log.warning("No route available from %s to %s", self.state.position, goal)
 
     def _current_goal(self) -> Optional[tuple[int, int]]:
         if not self.active_task:
@@ -339,6 +353,7 @@ class RobotNode:
                 self.task_complete_at = self.state.tick
                 self.active_task = None
                 self.state.current_task = None
+                self.state.goal = None
                 self.state.status = "IDLE"
                 self.path = []
                 self.phase = "to_pickup"

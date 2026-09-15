@@ -58,34 +58,37 @@ def spawn_robots(scenario: dict, headless: bool = True) -> list[subprocess.Popen
     return procs
 
 
-def run_tasks(scenario: dict) -> None:
+def run_tasks(scenario: dict, start_time: float) -> None:
     gen = TaskGenerator(port=BROADCAST_PORT)
-    scenario_start = time.monotonic()
-    time.sleep(scenario.get("task_delay", 1.0))
-
+    actions: list[tuple[float, str, dict]] = []
+    task_time = scenario.get("task_delay", 1.0)
     for task in scenario.get("tasks", []):
-        spec = TaskSpec(
-            task_id=task["id"],
-            pickup=tuple(task["pickup"]),
-            dropoff=tuple(task["dropoff"]),
-            urgency=task.get("urgency", 1.0),
-            deadline_tick=task.get("deadline_tick"),
-        )
-        gen.announce(spec, tick=task.get("announce_tick", 0))
-        time.sleep(task.get("delay_after", 1.5))
-
+        actions.append((task_time, "task", task))
+        task_time += task.get("delay_after", 1.5)
     for event in scenario.get("events", []):
-        event_time = scenario_start + event.get("at_tick", 100) * TICK_DT
-        time.sleep(max(0, event_time - time.monotonic()))
-        if event["type"] == "block_aisle":
-            gen.block_aisle(
-                event["aisle_id"],
-                [tuple(c) for c in event["cells"]],
-                tick=event.get("at_tick", 100),
-            )
+        actions.append((event.get("at_tick", 100) * TICK_DT, "event", event))
 
-    time.sleep(2)
-    gen.close()
+    try:
+        for relative_time, action_type, payload in sorted(actions, key=lambda item: item[0]):
+            target_time = start_time + relative_time
+            time.sleep(max(0.0, target_time - time.monotonic()))
+            if action_type == "task":
+                spec = TaskSpec(
+                    task_id=payload["id"],
+                    pickup=tuple(payload["pickup"]),
+                    dropoff=tuple(payload["dropoff"]),
+                    urgency=payload.get("urgency", 1.0),
+                    deadline_tick=payload.get("deadline_tick"),
+                )
+                gen.announce(spec, tick=payload.get("announce_tick", 0))
+            elif payload["type"] == "block_aisle":
+                gen.block_aisle(
+                    payload["aisle_id"],
+                    [tuple(c) for c in payload.get("cells", [])],
+                    tick=payload.get("at_tick", 100),
+                )
+    finally:
+        gen.close()
 
 
 def visualize(scenario: dict, duration: float) -> None:
@@ -136,7 +139,10 @@ def main() -> None:
     print(f"Running scenario: {scenario.get('name', scenario_path.name)}")
     procs = spawn_robots(scenario, headless=not args.no_headless)
 
-    task_thread = threading.Thread(target=run_tasks, args=(scenario,), daemon=True)
+    start_time = time.monotonic()
+    task_thread = threading.Thread(
+        target=run_tasks, args=(scenario, start_time), daemon=True
+    )
     task_thread.start()
 
     duration = scenario.get("max_ticks", 500) * TICK_DT + 5
