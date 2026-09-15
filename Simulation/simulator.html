@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MeshFleet — Decentralized Fleet Intelligence | AMR Warehouse Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg:#0c1013;
+    --panel:#12181d;
+    --panel-border:#232d34;
+    --accent:#ffb020;
+    --accent2:#3fd6c5;
+    --text:#e7edf1;
+    --muted:#8ba0ab;
+    --danger:#ff5d5d;
+    --ok:#59d68a;
+    --mono:'IBM Plex Mono','Courier New',monospace;
+    --sans:'Inter','Segoe UI',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;height:100%;}
+  #canvas-wrap{position:absolute;inset:0;}
+  canvas{display:block;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 16px;background:linear-gradient(180deg,rgba(12,16,19,.92),rgba(12,16,19,0));
+    pointer-events:none;z-index:5;
+  }
+  #topbar .brand{font-family:var(--mono);font-size:13px;letter-spacing:.02em;color:var(--muted);pointer-events:auto;}
+  #topbar .brand b{color:var(--text);font-weight:600;}
+  #topbar .brand .tag{color:var(--accent2);}
+  #clock{font-family:var(--mono);font-size:13px;color:var(--muted);pointer-events:auto;}
+  #clock b{color:var(--text)}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+
+  #controls{
+    position:absolute;left:14px;bottom:14px;width:300px;padding:14px;z-index:5;
+  }
+  #controls h3{margin:0 0 10px;font-size:12px;letter-spacing:.06em;color:var(--muted);font-weight:600;text-transform:none;}
+  .row{display:flex;gap:8px;margin-bottom:8px;}
+  button{
+    background:#1a2126;color:var(--text);border:1px solid var(--panel-border);border-radius:6px;
+    padding:7px 10px;font-family:var(--sans);font-size:12.5px;cursor:pointer;flex:1;
+  }
+  button:hover{border-color:var(--accent2);}
+  button.primary{background:var(--accent2);color:#052a26;border-color:var(--accent2);font-weight:600;}
+  button.primary:hover{filter:brightness(1.08);}
+  select,input[type=range]{width:100%;background:#1a2126;color:var(--text);border:1px solid var(--panel-border);border-radius:6px;padding:6px;font-family:var(--sans);font-size:12.5px;}
+  label.small{font-size:11px;color:var(--muted);display:block;margin:8px 0 4px;}
+
+  #infopanel{
+    position:absolute;right:14px;top:56px;width:260px;padding:14px;z-index:5;font-family:var(--mono);
+  }
+  #infopanel h3{margin:0 0 10px;font-size:12px;letter-spacing:.06em;color:var(--muted);font-weight:600;font-family:var(--sans);}
+  #infopanel .id{font-size:20px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+  #infopanel .field{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px dashed #1c252b;}
+  #infopanel .field span:first-child{color:var(--muted);}
+  #infopanel .state-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:.03em;}
+  #infopanel .empty{color:var(--muted);font-size:12px;font-family:var(--sans);line-height:1.5;}
+
+  #legend{
+    position:absolute;right:14px;bottom:14px;width:260px;padding:12px 14px;z-index:5;font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  }
+  #legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  #legend div{margin:2px 0;}
+
+  #eventlog{
+    position:absolute;left:14px;top:56px;width:340px;max-height:230px;overflow-y:auto;padding:10px 12px;z-index:5;font-family:var(--mono);font-size:11.5px;
+  }
+  #eventlog h3{margin:0 0 8px;font-size:12px;letter-spacing:.06em;color:var(--muted);font-weight:600;font-family:var(--sans);}
+  #eventlog .line{padding:2px 0;color:var(--muted);border-bottom:1px solid #171e23;}
+  #eventlog .line b{color:var(--text);}
+  #eventlog .line.warn b{color:var(--danger);}
+  #eventlog .line.ok b{color:var(--ok);}
+
+  #speedval{color:var(--text);font-family:var(--mono);}
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:#2a343b;border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<div id="topbar">
+  <div class="brand"><b>MeshFleet</b> <span class="tag">/ sim</span> — Edge-AI Distributed Fleet Coordination · </div>
+  <div id="clock">t = <b id="simtime">0.0s</b> &nbsp;|&nbsp; robots: <b id="robotcount">0</b></div>
+</div>
+
+<div id="eventlog" class="panel">
+  <h3>EVENT LOG</h3>
+  <div id="eventlist"></div>
+</div>
+
+<div id="infopanel" class="panel">
+  <h3>SELECTED ROBOT</h3>
+  <div id="infocontent" class="empty">Click a robot in the scene to inspect its live state.</div>
+</div>
+
+<div id="legend" class="panel">
+  <div><span class="dot" style="background:#3fd6c5"></span>IDLE</div>
+  <div><span class="dot" style="background:#59d68a"></span>MOVING</div>
+  <div><span class="dot" style="background:#ffd23f"></span>WAITING</div>
+  <div><span class="dot" style="background:#ff9d3f"></span>AVOIDING / REROUTING</div>
+  <div><span class="dot" style="background:#4fa8ff"></span>CHARGING</div>
+  <div><span class="dot" style="background:#ff5d5d"></span>BLOCKED / ERROR</div>
+</div>
+
+<div id="controls" class="panel">
+  <h3>SIMULATION CONTROL</h3>
+  <div class="row">
+    <button class="primary" id="btnStart">▶ Start</button>
+    <button id="btnPause">⏸ Pause</button>
+    <button id="btnReset">⟲ Reset</button>
+  </div>
+  <label class="small">Simulation speed — <span id="speedval">1.0x</span></label>
+  <input type="range" id="speedRange" min="0" max="4" step="0.1" value="1">
+  <label class="small">Scenario</label>
+  <select id="scenarioSelect">
+    <option value="1">1 — Roaming patrol routes (3 AMRs)</option>
+    <option value="2">2 — Convergent intersection</option>
+    <option value="3">3 — Narrow-aisle face-off</option>
+    <option value="4">4 — Dynamic obstacle blocks aisle</option>
+    <option value="5">5 — Mid-route reroute command</option>
+    <option value="6">6 — Low battery → charging</option>
+    <option value="7">7 — External STOP / safety command</option>
+    <option value="8">8 — Pickup → transport → drop-off (fleet)</option>
+  </select>
+  <label class="small">Fleet size</label>
+  <select id="fleetSelect">
+    <option value="3">3 robots</option>
+    <option value="5">5 robots</option>
+    <option value="10">10 robots</option>
+  </select>
+</div>
+
+<script>
+/* ==========================================================================
+   MeshFleet Simulator — self-contained 3D warehouse AMR simulation
+   --------------------------------------------------------------------------
+   This file is the SIMULATION + VISUALIZATION layer only.
+   It exposes window.MeshFleet as the integration interface described in
+   SIMULATION_INTERFACES.md. Teammates' modules (P2P comms, path planner,
+   conflict resolution, task allocation, edge-AI, dashboard) are expected
+   to call into this interface rather than being implemented here.
+   ========================================================================== */
+
+//////////////////////// WAREHOUSE CONFIG (Part 4) ////////////////////////
+// A warehouse "layout" is a plain data object. Swapping this object swaps
+// the whole warehouse — nothing below hard-codes geometry beyond reading it.
+function buildDefaultWarehouseLayout(){
+  const rackRowsZ = [-9,-3,3,9];
+  const rackDepth = 1.6, rackHeight = 2.3;
+  const crossAisles = [ {x:-6, width:3.0, narrow:false}, {x:9, width:1.8, narrow:true} ];
+  const xMin=-20, xMax=20;
+
+  function segmentsForRow(){
+    const segs=[];
+    let cursor = xMin;
+    const sorted = [...crossAisles].sort((a,b)=>a.x-b.x);
+    sorted.forEach(a=>{
+      const gapStart = a.x - a.width/2, gapEnd = a.x + a.width/2;
+      segs.push([cursor, gapStart]);
+      cursor = gapEnd;
+    });
+    segs.push([cursor, xMax]);
+    return segs;
+  }
+
+  const racks = [];
+  rackRowsZ.forEach((z, rowIdx)=>{
+    segmentsForRow().forEach((seg, segIdx)=>{
+      const w = seg[1]-seg[0];
+      if(w < 1) return;
+      racks.push({
+        id:`RACK-${rowIdx}-${segIdx}`,
+        x:(seg[0]+seg[1])/2, z, w, d:rackDepth, h:rackHeight
+      });
+    });
+  });
+
+  return {
+    name:"SIH26 Default Warehouse — Layout A",
+    bounds:{xMin:-22, xMax:22, zMin:-14, zMax:14},
+    gridScale:1,                 // 1 world unit = 1 grid unit (route coords are world coords)
+    racks,
+    aisles:{ crossAisles, rowsZ: rackRowsZ },
+    intersections:[
+      {id:"INT-A", x:-6, z:-6}, {id:"INT-B", x:-6, z:0}, {id:"INT-C", x:-6, z:6},
+      {id:"INT-D", x:9,  z:-6, narrow:true}, {id:"INT-E", x:9, z:0, narrow:true}, {id:"INT-F", x:9, z:6, narrow:true},
+    ],
+    pickupStations:[
+      {id:"P-01", x:-20.5, z:-9}, {id:"P-02", x:-20.5, z:-3}, {id:"P-03", x:-20.5, z:3}, {id:"P-04", x:-20.5, z:9},
+    ],
+    dropStations:[
+      {id:"D-01", x:20.5, z:-9}, {id:"D-02", x:20.5, z:-3}, {id:"D-03", x:20.5, z:3}, {id:"D-04", x:20.5, z:9},
+    ],
+    chargingStations:[
+      {id:"C-01", x:-6, z:12.5}, {id:"C-02", x:9, z:12.5}, {id:"C-03", x:-6, z:-12.5},
+    ],
+    staticObstacles:[
+      {id:"OBS-STATIC-1", x:0, z:6, r:0.6},
+    ],
+  };
+}
+
+//////////////////////// DATA SCHEMAS (Part 6, 7, 8, 10, 11) ////////////////////////
+// These mirror meshfleet_sim/schemas.py exactly (field-for-field) so the
+// Python reference engine and this browser demo agree on one contract.
+
+function makeRobotState(id, x, z, opts={}){
+  return {
+    robot_id:id,
+    position:{x, y:0, z},
+    orientation: opts.orientation||0,          // radians, yaw
+    velocity: opts.velocity||0,                // scalar m/s along heading
+    battery: opts.battery!==undefined?opts.battery:100,
+    current_task: opts.current_task||null,
+    destination: opts.destination||null,
+    current_route: opts.route||[],
+    current_state: opts.state||"IDLE",
+    communication_status: opts.comm||"ONLINE",
+    timestamp: 0,
+  };
+}
+
+// RobotCommand shape (for reference / docs):
+// { type: "SET_ROUTE"|"STOP"|"WAIT"|"RESUME"|"REROUTE"|"GO_TO_CHARGER"|"SET_VELOCITY",
+//   target: robot_id, route: [[x,z],...], velocity: number }
+
+// Task shape: { task_id, pickup_location, drop_location, priority }
+
+// CollisionEvent shape: { timestamp, robot_a, robot_b_or_obstacle, location:{x,z}, severity }
+
+//////////////////////// SIMULATION ENGINE ////////////////////////
+const Sim = {
+  warehouse: buildDefaultWarehouseLayout(),
+  robots: new Map(),           // robot_id -> full mutable robot record (state + motion internals)
+  obstacles: new Map(),        // obstacle_id -> {id,x,z,r,blocking_aisle,temporary,expiresAt}
+  blockedAisles: new Map(),    // aisle_id -> {id, box:{xMin,xMax,zMin,zMax}, temporary}
+  tasks: new Map(),
+  collisionEvents: [],
+  simTime: 0,
+  running: false,
+  speed: 1.0,
+  listeners: [],               // event subscribers: (eventName, payload) => {}
+  selectedRobot: null,
+  ROBOT_RADIUS: 0.55,
+  MAX_SPEED: 3.2,
+  ACCEL: 2.0,
+  DECEL: 3.0,
+  ARRIVE_EPS: 0.12,
+};
+
+function emit(eventName, payload){
+  Sim.listeners.forEach(fn=>{ try{ fn(eventName,payload); }catch(e){ console.error(e); } });
+  logEvent(eventName, payload);
+}
+
+function addRobot(id, x, z, color){
+  const r = makeRobotState(id, x, z, {state:"IDLE"});
+  r._color = color;
+  r._targetVelocity = 0;
+  r._waypoints = [];          // array of {x,z}
+  r._wpIndex = 0;
+  r._waitTimer = 0;
+  r._loopRoute = null;
+  r._mesh = null;
+  r._batteryDrainMultiplier = 1.0;
+  Sim.robots.set(id, r);
+  return r;
+}
+
+function setRoute(robotId, route /* [[x,z],...] */, opts={}){
+  const r = Sim.robots.get(robotId);
+  if(!r) return false;
+  r._waypoints = route.map(p=>({x:p[0], z:p[1]}));
+  r._wpIndex = 0;
+  r.current_route = route;
+  r._loopRoute = opts.loop ? route.map(p=>[p[0], p[1]]) : null;
+  if(opts.destination) r.destination = opts.destination;
+  if(r.current_state==="IDLE" || r.current_state==="WAITING") r.current_state = "MOVING";
+  emit("ROUTE_SET", {robot_id:robotId, route});
+  return true;
+}
+
+function assignTask(task){
+  Sim.tasks.set(task.task_id, task);
+  emit("TASK_ASSIGNED", task);
+}
+
+function sendCommand(cmd){
+  const r = Sim.robots.get(cmd.target);
+  if(!r) return {ok:false, error:"unknown robot"};
+  switch(cmd.type){
+    case "SET_ROUTE": setRoute(cmd.target, cmd.route, cmd); break;
+    case "STOP":
+      r._waypoints = []; r._targetVelocity = 0; r.velocity = 0; r.current_state = "BLOCKED";
+      emit("SAFETY_STOP", {robot_id:cmd.target});
+      break;
+    case "WAIT": r.current_state = "WAITING"; r._targetVelocity = 0; break;
+    case "RESUME": if(r._waypoints.length){ r.current_state = "MOVING"; } else { r.current_state="IDLE"; } break;
+    case "REROUTE": setRoute(cmd.target, cmd.route, {destination:cmd.destination}); r.current_state="REROUTING"; break;
+    case "GO_TO_CHARGER":
+      const cs = nearestCharger(r);
+      setRoute(cmd.target, [[r.position.x, r.position.z],[cs.x, cs.z]], {destination:`CHARGER:${cs.id}`});
+      r._goingToCharge = cs.id;
+      break;
+    case "SET_VELOCITY": r._maxOverride = cmd.velocity; break;
+  }
+  return {ok:true};
+}
+
+function nearestCharger(r){
+  let best=null, bd=Infinity;
+  Sim.warehouse.chargingStations.forEach(c=>{
+    const d=Math.hypot(c.x-r.position.x, c.z-r.position.z);
+    if(d<bd){bd=d; best=c;}
+  });
+  return best;
+}
+
+function addObstacle(id, x, z, r=0.6, opts={}){
+  const o = {id, x, z, r, temporary: !!opts.temporary, expiresAt: opts.duration? Sim.simTime+opts.duration : null};
+  Sim.obstacles.set(id, o);
+  emit("OBSTACLE_ADDED", o);
+  return o;
+}
+function removeObstacle(id){
+  if(Sim.obstacles.delete(id)) emit("OBSTACLE_REMOVED", {id});
+}
+function blockAisle(id, box, opts={}){
+  const b = {id, box, temporary: !!opts.temporary, expiresAt: opts.duration? Sim.simTime+opts.duration:null};
+  Sim.blockedAisles.set(id, b);
+  emit("AISLE_BLOCKED", b);
+}
+function unblockAisle(id){
+  if(Sim.blockedAisles.delete(id)) emit("AISLE_UNBLOCKED", {id});
+}
+
+function getEnvironmentState(){
+  return {
+    warehouse: Sim.warehouse,
+    obstacles: Array.from(Sim.obstacles.values()),
+    blocked_aisles: Array.from(Sim.blockedAisles.values()),
+    robot_states: Array.from(Sim.robots.values()).map(publicRobotState),
+    simulation_time: Sim.simTime,
+  };
+}
+function publicRobotState(r){
+  return {
+    robot_id:r.robot_id, position:{...r.position}, orientation:r.orientation,
+    velocity:r.velocity, battery:Math.round(r.battery*10)/10,
+    current_task:r.current_task, destination:r.destination,
+    current_route:r.current_route, current_state:r.current_state,
+    communication_status:r.communication_status, timestamp:Sim.simTime,
+  };
+}
+
+// Public integration surface (Part 6/12) --------------------------------
+window.MeshFleet = {
+  getEnvironmentState,
+  getRobotState:(id)=> { const r=Sim.robots.get(id); return r? publicRobotState(r): null; },
+  sendCommand,
+  setRoute:(id, route, opts)=> setRoute(id, route, opts),
+  assignTask,
+  addObstacle, removeObstacle, blockAisle, unblockAisle,
+  onEvent:(fn)=> Sim.listeners.push(fn),
+  loadScenario:(n)=> loadScenario(n),
+  listRobots:()=> Array.from(Sim.robots.keys()),
+  // Mock comm layer (Part 12) — swappable stand-in for a real P2P module.
+  mockComm:{
+    broadcastState:()=> Array.from(Sim.robots.values()).map(publicRobotState),
+    receiveCommand:(cmd)=> sendCommand(cmd),
+  }
+};
+
+//////////////////////// COLLISION DETECTION (Part 10) ////////////////////////
+function checkCollisions(){
+  const list = Array.from(Sim.robots.values());
+  for(let i=0;i<list.length;i++){
+    for(let j=i+1;j<list.length;j++){
+      const a=list[i], b=list[j];
+      const d = Math.hypot(a.position.x-b.position.x, a.position.z-b.position.z);
+      const minD = Sim.ROBOT_RADIUS*2;
+      if(d < minD*1.001 && d>=minD){
+        // near-miss zone: trigger avoidance signal (simulation just reports it)
+        if(a.current_state==="MOVING") a.current_state="AVOIDING";
+        if(b.current_state==="MOVING") b.current_state="AVOIDING";
+      }
+      if(d < minD){
+        const ev = {timestamp:Sim.simTime, robot_a:a.robot_id, robot_b_or_obstacle:b.robot_id,
+                    location:{x:(a.position.x+b.position.x)/2, z:(a.position.z+b.position.z)/2}, severity:"HIGH"};
+        Sim.collisionEvents.push(ev);
+        emit("COLLISION", ev);
+        a._targetVelocity=0; b._targetVelocity=0;
+        a.current_state="WAITING"; b.current_state="WAITING";
+      }
+    }
+  }
+  // robot vs static/dynamic obstacles
+  Sim.obstacles.forEach(o=>{
+    list.forEach(a=>{
+      const d = Math.hypot(a.position.x-o.x, a.position.z-o.z);
+      if(d < Sim.ROBOT_RADIUS + o.r){
+        const ev={timestamp:Sim.simTime, robot_a:a.robot_id, robot_b_or_obstacle:o.id,
+                   location:{x:o.x,z:o.z}, severity:"MEDIUM"};
+        Sim.collisionEvents.push(ev); emit("COLLISION", ev);
+        a._targetVelocity=0; a.current_state="AVOIDING";
+      }
+    });
+  });
+}
+
+function pointInBlockedAisle(x,z){
+  for(const b of Sim.blockedAisles.values()){
+    const bx=b.box;
+    if(x>=bx.xMin&&x<=bx.xMax&&z>=bx.zMin&&z<=bx.zMax) return b;
+  }
+  return null;
+}
+
+//////////////////////// PHYSICS / MOVEMENT (Part 3) ////////////////////////
+function stepRobot(r, dt){
+  // battery drain
+  const moving = r.current_state==="MOVING" || r.current_state==="AVOIDING" || r.current_state==="REROUTING";
+  if(r.current_state==="CHARGING"){
+    r.battery = Math.min(100, r.battery + 12*dt);
+    if(r.battery>=99.5){ r.current_state="IDLE"; r._goingToCharge=null; emit("CHARGE_COMPLETE",{robot_id:r.robot_id}); }
+    return;
+  } else {
+    const drain = (moving? 0.9 : 0.05) * r._batteryDrainMultiplier;
+    r.battery = Math.max(0, r.battery - drain*dt);
+  }
+
+  if(r.current_state==="WAITING" || r.current_state==="BLOCKED" || r.current_state==="ERROR"){
+    r._targetVelocity = 0;
+  }
+
+  if(!r._waypoints.length){
+    r._targetVelocity = 0;
+    r.velocity = Math.max(0, r.velocity - Sim.DECEL*dt);
+    if(r.velocity<=0.01 && r.current_state==="MOVING") r.current_state="IDLE";
+    return;
+  }
+
+  const wp = r._waypoints[r._wpIndex];
+  const dx = wp.x - r.position.x, dz = wp.z - r.position.z;
+  const dist = Math.hypot(dx,dz);
+  const desiredHeading = Math.atan2(dx,dz);
+
+  // check aisle block ahead
+  if(pointInBlockedAisle(wp.x, wp.z)){
+    r.current_state="BLOCKED"; r._targetVelocity=0;
+  } else if(r.current_state==="BLOCKED"){
+    r.current_state="MOVING";
+  }
+
+  if(dist < Sim.ARRIVE_EPS){
+    r._wpIndex++;
+    if(r._wpIndex>=r._waypoints.length){
+      if(r._loopRoute && !r._goingToCharge){
+        r._waypoints = r._loopRoute.map(p=>({x:p[0], z:p[1]}));
+        r._wpIndex = 0;
+        r.current_state = "MOVING";
+        r.velocity = 0;
+        emit("PATROL_LOOP", {robot_id:r.robot_id});
+        return;
+      }
+      r._waypoints=[];
+      if(r._goingToCharge){ r.current_state="CHARGING"; emit("CHARGE_START",{robot_id:r.robot_id}); }
+      else { r.current_state="IDLE"; r.destination=null; emit("DESTINATION_REACHED",{robot_id:r.robot_id}); }
+      r.velocity=0;
+      return;
+    }
+  }
+
+  if(!["WAITING","BLOCKED","ERROR"].includes(r.current_state)){
+    r.current_state = r.current_state==="AVOIDING"||r.current_state==="REROUTING" ? r.current_state : "MOVING";
+    r._targetVelocity = r._maxOverride || Sim.MAX_SPEED;
+  }
+
+  // turn toward heading (simple smoothing)
+  let dAngle = desiredHeading - r.orientation;
+  while(dAngle>Math.PI) dAngle-=2*Math.PI;
+  while(dAngle<-Math.PI) dAngle+=2*Math.PI;
+  r.orientation += dAngle * Math.min(1, dt*4);
+
+  // accelerate / decelerate toward target velocity
+  if(r.velocity < r._targetVelocity) r.velocity = Math.min(r._targetVelocity, r.velocity + Sim.ACCEL*dt);
+  else r.velocity = Math.max(r._targetVelocity, r.velocity - Sim.DECEL*dt);
+
+  const moveDist = r.velocity*dt;
+  const ratio = dist>0? Math.min(1, moveDist/dist):0;
+  r.position.x += dx*ratio;
+  r.position.z += dz*ratio;
+}
+
+function stepSimulation(dt){
+  Sim.simTime += dt;
+  // expire temporary obstacles / blocks
+  Sim.obstacles.forEach((o,id)=>{ if(o.expiresAt!==null && Sim.simTime>=o.expiresAt) removeObstacle(id); });
+  Sim.blockedAisles.forEach((b,id)=>{ if(b.expiresAt!==null && Sim.simTime>=b.expiresAt) unblockAisle(id); });
+
+  Sim.robots.forEach(r=>{
+    if(r.battery<=2 && r.current_state!=="CHARGING" && !r._goingToCharge && !r._loopRoute){
+      emit("LOW_BATTERY",{robot_id:r.robot_id, battery:r.battery});
+      sendCommand({type:"GO_TO_CHARGER", target:r.robot_id});
+    }
+    stepRobot(r, dt);
+  });
+  checkCollisions();
+}
+
+//////////////////////// EVENT LOG UI ////////////////////////
+function logEvent(name, payload){
+  const list = document.getElementById('eventlist');
+  const line = document.createElement('div');
+  const warn = ["COLLISION","SAFETY_STOP","AISLE_BLOCKED","LOW_BATTERY"].includes(name);
+  const ok = ["DESTINATION_REACHED","CHARGE_COMPLETE","AISLE_UNBLOCKED"].includes(name);
+  line.className = 'line' + (warn?' warn':'') + (ok?' ok':'');
+  const t = Sim.simTime.toFixed(1);
+  let detail = '';
+  if(payload && payload.robot_id) detail = payload.robot_id;
+  if(payload && payload.robot_a) detail = `${payload.robot_a} × ${payload.robot_b_or_obstacle}`;
+  line.innerHTML = `[<b>${t}s</b>] <b>${name}</b> ${detail}`;
+  list.prepend(line);
+  while(list.children.length>60) list.removeChild(list.lastChild);
+}
+
+/* ============================== THREE.JS SCENE ============================== */
+let scene, camera, renderer, raycaster, mouse;
+const robotMeshes = new Map();
+const dynamicObjects = { obstacles:new Map(), blocks:new Map() };
+let cam = { theta: Math.PI*0.32, phi: 1.0, radius: 34, target:new THREE.Vector3(0,0,0) };
+
+function initScene(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0c1013);
+  scene.fog = new THREE.Fog(0x0c1013, 40, 90);
+
+  camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.1, 300);
+  updateCameraFromOrbit();
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled = true;
+  document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+
+  const hemi = new THREE.HemisphereLight(0x8fa8b5, 0x11151a, 0.9);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xfff2d8, 0.9);
+  dir.position.set(20,30,10);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(2048,2048);
+  dir.shadow.camera.left=-30; dir.shadow.camera.right=30; dir.shadow.camera.top=30; dir.shadow.camera.bottom=-30;
+  scene.add(dir);
+
+  buildFloor();
+  buildRacks();
+  buildStations();
+  buildIntersectionMarkers();
+  Sim.warehouse.staticObstacles.forEach(o=> addObstacle(o.id, o.x, o.z, o.r));
+
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+  renderer.domElement.addEventListener('click', onSceneClick);
+  attachOrbitControls(renderer.domElement);
+  window.addEventListener('resize', onResize);
+}
+
+function updateCameraFromOrbit(){
+  const x = cam.target.x + cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+  const y = cam.target.y + cam.radius*Math.cos(cam.phi);
+  const z = cam.target.z + cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+  camera.position.set(x,y,z);
+  camera.lookAt(cam.target);
+}
+
+function attachOrbitControls(el){
+  let dragging=false, panning=false, lastX=0,lastY=0;
+  el.addEventListener('mousedown', e=>{ dragging = e.button===0; panning = e.button===2; lastX=e.clientX; lastY=e.clientY; });
+  window.addEventListener('mouseup', ()=>{ dragging=false; panning=false; });
+  window.addEventListener('mousemove', e=>{
+    if(!dragging && !panning) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+    if(dragging){
+      cam.theta -= dx*0.005;
+      cam.phi = Math.min(1.5, Math.max(0.15, cam.phi - dy*0.005));
+      updateCameraFromOrbit();
+    } else if(panning){
+      const panSpeed = cam.radius*0.0012;
+      const right = new THREE.Vector3(Math.cos(cam.theta),0,-Math.sin(cam.theta));
+      const fwd = new THREE.Vector3(Math.sin(cam.theta),0,Math.cos(cam.theta));
+      cam.target.addScaledVector(right, -dx*panSpeed);
+      cam.target.addScaledVector(fwd, dy*panSpeed);
+      updateCameraFromOrbit();
+    }
+  });
+  el.addEventListener('contextmenu', e=>e.preventDefault());
+  el.addEventListener('wheel', e=>{
+    cam.radius = Math.min(70, Math.max(8, cam.radius + e.deltaY*0.02));
+    updateCameraFromOrbit();
+  });
+}
+
+function onResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function buildFloor(){
+  const w = Sim.warehouse.bounds;
+  const geo = new THREE.PlaneGeometry(w.xMax-w.xMin, w.zMax-w.zMin);
+  const mat = new THREE.MeshStandardMaterial({color:0x171f24, roughness:0.95, metalness:0.05});
+  const floor = new THREE.Mesh(geo, mat);
+  floor.rotation.x = -Math.PI/2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const grid = new THREE.GridHelper((w.xMax-w.xMin), (w.xMax-w.xMin), 0x2a343b, 0x1b2328);
+  grid.position.y = 0.001;
+  scene.add(grid);
+}
+
+function buildRacks(){
+  const mat = new THREE.MeshStandardMaterial({color:0x3a4a52, roughness:0.6, metalness:0.4});
+  const edgeMat = new THREE.LineBasicMaterial({color:0x53707a});
+  Sim.warehouse.racks.forEach(rk=>{
+    const geo = new THREE.BoxGeometry(rk.w, rk.h, rk.d);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(rk.x, rk.h/2, rk.z);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+    // shelf lines for visual interest
+    const edges = new THREE.EdgesGeometry(geo);
+    const seg = new THREE.LineSegments(edges, edgeMat);
+    seg.position.copy(mesh.position);
+    scene.add(seg);
+  });
+}
+
+function padMesh(x,z,color,label,size=1.6){
+  const geo = new THREE.CylinderGeometry(size*0.5, size*0.5, 0.06, 24);
+  const mat = new THREE.MeshStandardMaterial({color, emissive:color, emissiveIntensity:0.25, roughness:0.5});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 0.03, z);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  scene.add(makeTextSprite(label, x, 0.9, z, '#0c1013', color));
+  return mesh;
+}
+
+function buildStations(){
+  Sim.warehouse.pickupStations.forEach(s=> padMesh(s.x,s.z,0x3fd6c5,s.id));
+  Sim.warehouse.dropStations.forEach(s=> padMesh(s.x,s.z,0xffb020,s.id));
+  Sim.warehouse.chargingStations.forEach(s=> padMesh(s.x,s.z,0x4fa8ff,s.id,2.0));
+}
+
+function buildIntersectionMarkers(){
+  Sim.warehouse.intersections.forEach(it=>{
+    const geo = new THREE.RingGeometry(0.9,1.05,24);
+    const mat = new THREE.MeshBasicMaterial({color: it.narrow?0xff9d3f:0x53707a, side:THREE.DoubleSide, transparent:true, opacity:0.5});
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI/2;
+    mesh.position.set(it.x, 0.015, it.z);
+    scene.add(mesh);
+  });
+}
+
+function makeTextSprite(text, x,y,z, bg='#0c1013', fg='#e7edf1'){
+  const canvas = document.createElement('canvas');
+  canvas.width=256; canvas.height=64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(0,0,256,64);
+  ctx.font = 'bold 34px monospace';
+  ctx.fillStyle = typeof fg === 'number' ? '#'+fg.toString(16) : fg;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(text, 128, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({map:tex, depthTest:false, transparent:true});
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.6,0.65,1);
+  sprite.position.set(x,y,z);
+  return sprite;
+}
+
+const STATE_COLORS = {
+  IDLE:0x3fd6c5, MOVING:0x59d68a, WAITING:0xffd23f, AVOIDING:0xff9d3f,
+  REROUTING:0xff9d3f, CHARGING:0x4fa8ff, BLOCKED:0xff5d5d, ERROR:0xff5d5d,
+};
+
+function buildRobotMesh(r){
+  const group = new THREE.Group();
+  const bodyGeo = new THREE.CylinderGeometry(Sim.ROBOT_RADIUS*0.9, Sim.ROBOT_RADIUS*0.9, 0.5, 20);
+  const bodyMat = new THREE.MeshStandardMaterial({color:r._color, roughness:0.4, metalness:0.3});
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.35; body.castShadow=true;
+  group.add(body);
+
+  const noseGeo = new THREE.ConeGeometry(0.18,0.4,12);
+  const nose = new THREE.Mesh(noseGeo, new THREE.MeshStandardMaterial({color:0xffffff}));
+  nose.rotation.x = Math.PI/2;
+  nose.position.set(0,0.35, Sim.ROBOT_RADIUS*0.75);
+  group.add(nose);
+
+  const beaconGeo = new THREE.SphereGeometry(0.14,12,12);
+  const beaconMat = new THREE.MeshStandardMaterial({color:STATE_COLORS[r.current_state], emissive:STATE_COLORS[r.current_state], emissiveIntensity:0.8});
+  const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+  beacon.position.y = 0.68;
+  group.add(beacon);
+  group.userData.beacon = beacon;
+
+  const label = makeTextSprite(r.robot_id, 0, 1.25, 0, '#000', 0xffffff);
+  group.add(label);
+
+  const routeGeo = new THREE.BufferGeometry();
+  const routeMat = new THREE.LineDashedMaterial({color:r._color, dashSize:0.4, gapSize:0.25, linewidth:1});
+  const routeLine = new THREE.Line(routeGeo, routeMat);
+  scene.add(routeLine);
+  group.userData.routeLine = routeLine;
+
+  group.userData.robotId = r.robot_id;
+  group.position.set(r.position.x, 0, r.position.z);
+  scene.add(group);
+  return group;
+}
+
+function syncRobotMeshes(){
+  Sim.robots.forEach(r=>{
+    let mesh = robotMeshes.get(r.robot_id);
+    if(!mesh){ mesh = buildRobotMesh(r); robotMeshes.set(r.robot_id, mesh); }
+    mesh.position.x = r.position.x; mesh.position.z = r.position.z;
+    mesh.rotation.y = r.orientation;
+    mesh.userData.beacon.material.color.setHex(STATE_COLORS[r.current_state]||0xffffff);
+    mesh.userData.beacon.material.emissive.setHex(STATE_COLORS[r.current_state]||0xffffff);
+
+    const pts = [new THREE.Vector3(r.position.x,0.05,r.position.z)];
+    r._waypoints.slice(r._wpIndex).forEach(wp=> pts.push(new THREE.Vector3(wp.x,0.05,wp.z)));
+    mesh.userData.routeLine.geometry.setFromPoints(pts);
+    mesh.userData.routeLine.computeLineDistances();
+    mesh.userData.routeLine.visible = pts.length>1;
+  });
+
+  // sync obstacle meshes
+  Sim.obstacles.forEach((o,id)=>{
+    if(!dynamicObjects.obstacles.has(id)){
+      const geo = new THREE.DodecahedronGeometry(o.r,0);
+      const mat = new THREE.MeshStandardMaterial({color:0xff5d5d, roughness:0.5});
+      const mesh = new THREE.Mesh(geo,mat);
+      mesh.position.set(o.x, o.r, o.z);
+      mesh.castShadow=true;
+      scene.add(mesh);
+      dynamicObjects.obstacles.set(id,mesh);
+    }
+  });
+  Array.from(dynamicObjects.obstacles.keys()).forEach(id=>{
+    if(!Sim.obstacles.has(id)){ scene.remove(dynamicObjects.obstacles.get(id)); dynamicObjects.obstacles.delete(id); }
+  });
+
+  // sync blocked aisle overlays
+  Sim.blockedAisles.forEach((b,id)=>{
+    if(!dynamicObjects.blocks.has(id)){
+      const w=b.box.xMax-b.box.xMin, d=b.box.zMax-b.box.zMin;
+      const geo = new THREE.PlaneGeometry(w,d);
+      const mat = new THREE.MeshBasicMaterial({color:0xff5d5d, transparent:true, opacity:0.35, side:THREE.DoubleSide});
+      const mesh = new THREE.Mesh(geo,mat);
+      mesh.rotation.x=-Math.PI/2;
+      mesh.position.set((b.box.xMin+b.box.xMax)/2, 0.04, (b.box.zMin+b.box.zMax)/2);
+      scene.add(mesh);
+      dynamicObjects.blocks.set(id,mesh);
+    }
+  });
+  Array.from(dynamicObjects.blocks.keys()).forEach(id=>{
+    if(!Sim.blockedAisles.has(id)){ scene.remove(dynamicObjects.blocks.get(id)); dynamicObjects.blocks.delete(id); }
+  });
+}
+
+function onSceneClick(e){
+  mouse.x = (e.clientX/window.innerWidth)*2-1;
+  mouse.y = -(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = Array.from(robotMeshes.values());
+  const hits = raycaster.intersectObjects(meshes, true);
+  if(hits.length){
+    let obj = hits[0].object;
+    while(obj && !obj.userData.robotId) obj = obj.parent;
+    if(obj) Sim.selectedRobot = obj.userData.robotId;
+    updateInfoPanel();
+  }
+}
+
+function updateInfoPanel(){
+  const el = document.getElementById('infocontent');
+  const r = Sim.robots.get(Sim.selectedRobot);
+  if(!r){ el.className='empty'; el.innerHTML='Click a robot in the scene to inspect its live state.'; return; }
+  el.className='';
+  const color = '#'+(STATE_COLORS[r.current_state]||0xffffff).toString(16).padStart(6,'0');
+  el.innerHTML = `
+    <div class="id">${r.robot_id}</div>
+    <div class="field"><span>state</span><span class="state-badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${r.current_state}</span></div>
+    <div class="field"><span>battery</span><span>${r.battery.toFixed(1)}%</span></div>
+    <div class="field"><span>task</span><span>${r.current_task||'—'}</span></div>
+    <div class="field"><span>destination</span><span>${r.destination||'—'}</span></div>
+    <div class="field"><span>speed</span><span>${r.velocity.toFixed(2)} u/s</span></div>
+    <div class="field"><span>position</span><span>${r.position.x.toFixed(1)}, ${r.position.z.toFixed(1)}</span></div>
+    <div class="field"><span>comm</span><span>${r.communication_status}</span></div>
+  `;
+}
+
+/* ============================== SCENARIOS (Part 13) ============================== */
+const ROBOT_COLORS = [0xffb020,0x3fd6c5,0xff5d9e,0x8b5cf6,0x4fa8ff,0x59d68a,0xff9d3f,0xe7edf1,0xf4d03f,0x2ecc71];
+
+function clearRobots(){
+  robotMeshes.forEach(m=>{ scene.remove(m.userData.routeLine); scene.remove(m); });
+  robotMeshes.clear();
+  Sim.robots.clear();
+}
+
+function spawnFleet(n){
+  clearRobots();
+  const startZ = [-9,-3,3,9,-6,0,6,-12,12,-1.5];
+  for(let i=0;i<n;i++){
+    const id = `AMR-${String(i+1).padStart(2,'0')}`;
+    addRobot(id, -18, startZ[i%startZ.length], ROBOT_COLORS[i%ROBOT_COLORS.length]);
+  }
+}
+
+function loadScenario(n){
+  Sim.obstacles.clear(); Sim.blockedAisles.clear(); Sim.collisionEvents=[]; Sim.simTime=0;
+  document.getElementById('eventlist').innerHTML='';
+  const fleetN = parseInt(document.getElementById('fleetSelect').value,10);
+  spawnFleet(Math.max(fleetN,3));
+  Sim.warehouse.staticObstacles.forEach(o=> addObstacle(o.id, o.x, o.z, o.r));
+
+  const ids = Array.from(Sim.robots.keys());
+  switch(String(n)){
+    case "1": // roaming patrol routes
+      const patrolBands = [-9,-3,3,9,-6,0,6,-12,12,-1.5];
+      ids.forEach((id, i)=>{
+        const startZ = patrolBands[i % patrolBands.length];
+        const laneZ = startZ === 6 ? 7.2 : startZ;
+        const x1 = -15 + Math.random()*4;
+        const x2 = -7 + Math.random()*6;
+        const x3 = 1 + Math.random()*6;
+        const x4 = 10 + Math.random()*6;
+        setRoute(id, [
+          [-18,startZ], [-18,laneZ], [x1,laneZ], [x2,laneZ],
+          [x3,laneZ], [x4,laneZ], [20,laneZ], [x4,laneZ],
+          [x2,laneZ], [x1,laneZ], [-18,laneZ], [-18,startZ]
+        ], {destination:`D-${String((i % 4) + 1).padStart(2,'0')}`, loop:true});
+      });
+      break;
+    case "2": // convergent intersection
+      setRoute(ids[0], [[-6,-12],[-6,0]], {destination:"INT-B"});
+      setRoute(ids[1], [[-18,0],[-6,0]], {destination:"INT-B"});
+      if(ids[2]) setRoute(ids[2], [[9,-9],[-6,-9],[-6,0]], {destination:"INT-B"});
+      break;
+    case "3": // narrow aisle face-off
+      addRobot('AMR-N1', 9, -12, 0xffffff);
+      addRobot('AMR-N2', 9, 12, 0x000000);
+      setRoute('AMR-N1', [[9,12]], {destination:"north end"});
+      setRoute('AMR-N2', [[9,-12]], {destination:"south end"});
+      break;
+    case "4": // dynamic obstacle mid-route
+      setRoute(ids[0], [[-18,-9],[-6,-9],[-6,9],[20,9]], {destination:"D-04"});
+      setTimeout(()=>{
+        blockAisle("AISLE-BLOCK-1", {xMin:-7.5,xMax:-4.5,zMin:-4,zMax:4}, {temporary:true, duration:20});
+      }, 3000/Math.max(Sim.speed,0.1));
+      break;
+    case "5": // mid-route reroute
+      setRoute(ids[0], [[-18,-9],[-6,-9],[-6,9],[20,9]], {destination:"D-04"});
+      setTimeout(()=>{ sendCommand({type:"REROUTE", target:ids[0], route:[[Sim.robots.get(ids[0]).position.x, Sim.robots.get(ids[0]).position.z],[9,0],[9,9],[20,9]], destination:"D-04 (new path)"}); }, 4000/Math.max(Sim.speed,0.1));
+      break;
+    case "6": // low battery -> charging
+      const r6 = Sim.robots.get(ids[0]); r6.battery = 6;
+      setRoute(ids[0], [[-18,-9],[-6,-9],[-6,3],[-18,3]], {destination:"patrol"});
+      break;
+    case "7": // safety stop
+      setRoute(ids[0], [[-18,-9],[20,-9]], {destination:"D-01"});
+      setTimeout(()=> sendCommand({type:"STOP", target:ids[0]}), 3500/Math.max(Sim.speed,0.1));
+      break;
+    case "8": // pickup -> transport -> drop-off
+      ids.forEach((id,i)=>{
+        const p = Sim.warehouse.pickupStations[i%4];
+        const d = Sim.warehouse.dropStations[i%4];
+        assignTask({task_id:`T-${i+1}`, pickup_location:p.id, drop_location:d.id, priority: i%3});
+        const r = Sim.robots.get(id);
+        r.current_task = `T-${i+1}`;
+        setRoute(id, [[p.x,p.z],[-6,p.z],[-6,d.z],[d.x,d.z]], {destination:d.id});
+      });
+      break;
+  }
+  updateInfoPanel();
+}
+
+/* ============================== ANIMATION LOOP ============================== */
+let lastT = performance.now();
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  let dt = (now-lastT)/1000; lastT = now;
+  dt = Math.min(dt, 0.1);
+  if(Sim.running){
+    stepSimulation(dt*Sim.speed);
+  }
+  syncRobotMeshes();
+  document.getElementById('simtime').textContent = Sim.simTime.toFixed(1)+'s';
+  document.getElementById('robotcount').textContent = Sim.robots.size;
+  if(Sim.selectedRobot) updateInfoPanel();
+  renderer.render(scene, camera);
+}
+
+/* ============================== UI WIRING ============================== */
+window.addEventListener('DOMContentLoaded', ()=>{
+  initScene();
+  loadScenario(1);
+  animate();
+
+  document.getElementById('btnStart').onclick = ()=>{ Sim.running = true; };
+  document.getElementById('btnPause').onclick = ()=>{ Sim.running = false; };
+  document.getElementById('btnReset').onclick = ()=>{ Sim.running=false; loadScenario(document.getElementById('scenarioSelect').value); };
+  document.getElementById('speedRange').oninput = (e)=>{ Sim.speed=parseFloat(e.target.value); document.getElementById('speedval').textContent = Sim.speed.toFixed(1)+'x'; };
+  document.getElementById('scenarioSelect').onchange = (e)=>{ Sim.running=false; loadScenario(e.target.value); };
+  document.getElementById('fleetSelect').onchange = ()=>{ Sim.running=false; loadScenario(document.getElementById('scenarioSelect').value); };
+});
+</script>
+</body>
+</html>
