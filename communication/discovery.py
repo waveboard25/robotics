@@ -56,16 +56,16 @@ class PeerTable:
             return
 
         self.peers[msg.robot_id] = PeerEntry(
-            state=state, last_seen=msg.timestamp, last_seq=msg.seq
+            state=state, last_seen=time.time(), last_seq=msg.seq
         )
 
     def evict_stale(self, now: Optional[float] = None) -> list[str]:
         now = now or time.time()
         evicted = []
-        for rid, entry in list(self.peers.items()):
-            if now - entry.last_seen > self.stale_threshold:
+        for rid, entry in self.peers.items():
+            if now - entry.last_seen > self.stale_threshold and entry.state.status != "STALE":
+                entry.state.status = "STALE"
                 evicted.append(rid)
-                del self.peers[rid]
         return evicted
 
     def get_active_peers(self) -> dict[str, RobotState]:

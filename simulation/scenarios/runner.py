@@ -60,6 +60,7 @@ def spawn_robots(scenario: dict, headless: bool = True) -> list[subprocess.Popen
 
 def run_tasks(scenario: dict) -> None:
     gen = TaskGenerator(port=BROADCAST_PORT)
+    scenario_start = time.monotonic()
     time.sleep(scenario.get("task_delay", 1.0))
 
     for task in scenario.get("tasks", []):
@@ -74,8 +75,8 @@ def run_tasks(scenario: dict) -> None:
         time.sleep(task.get("delay_after", 1.5))
 
     for event in scenario.get("events", []):
-        delay = event.get("at_tick", 100) * TICK_DT
-        time.sleep(max(0, delay - time.time() % 1000))  # rough timing
+        event_time = scenario_start + event.get("at_tick", 100) * TICK_DT
+        time.sleep(max(0, event_time - time.monotonic()))
         if event["type"] == "block_aisle":
             gen.block_aisle(
                 event["aisle_id"],

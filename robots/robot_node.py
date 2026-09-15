@@ -28,7 +28,7 @@ from communication.protocol import (
 from communication.transport_udp import UDPTransport
 from conflict_resolution.deadlock_detector import detect_deadlock_cycle, lowest_id_in_cycle
 from conflict_resolution.intersection_manager import IntersectionManager, TokenClaim
-from conflict_resolution.priority import compute_priority, should_yield
+from conflict_resolution.priority import compute_priority
 from meshfleet.constants import (
     BROADCAST_PORT,
     HEARTBEAT_HZ,
@@ -261,6 +261,9 @@ class RobotNode:
     def _resolve_move(self, next_cell: tuple[int, int]) -> bool:
         """Return True if robot may move to next_cell."""
         tick = self.state.tick + 1
+        if not self.grid.is_passable(*next_cell):
+            return False
+
         blocker = self.reservations.conflicting_robot(
             next_cell, tick, exclude_robot=self.robot_id
         )
@@ -268,18 +271,12 @@ class RobotNode:
         # Physical collision check
         occupant = self._check_collision_at(next_cell)
         if occupant:
-            peer = self.peers.get_peer(occupant)
-            if peer and should_yield(self.state, peer, self.grid):
-                self.waiting_on[self.robot_id] = occupant
-                return False
-            elif peer:
-                return True  # other yields
+            self.waiting_on[self.robot_id] = occupant
+            return False
 
         if blocker and blocker != self.robot_id:
-            peer = self.peers.get_peer(blocker)
-            if peer and should_yield(self.state, peer, self.grid):
-                self.waiting_on[self.robot_id] = blocker
-                return False
+            self.waiting_on[self.robot_id] = blocker
+            return False
 
         if self.grid.is_choke_point(next_cell):
             claims = [
@@ -378,12 +375,14 @@ class RobotNode:
             step_toward(self.state, next_cell, orca_vel)
 
             # Collision detection
-            for rid, peer in self.peers.get_active_peers().items():
-                if peer.position == self.state.position:
-                    self.collision_count += 1
-                    self.log.warning("Collision with %s!", rid)
-                    self.state.position = old_pos
-                    hold_position(self.state)
+            if self.state.position != old_pos:
+                for rid, peer in self.peers.get_active_peers().items():
+                    if peer.position == self.state.position:
+                        self.collision_count += 1
+                        self.log.warning("Collision with %s!", rid)
+                        self.state.position = old_pos
+                        hold_position(self.state)
+                        break
 
             if self.state.position != old_pos:
                 prev_cell = old_pos

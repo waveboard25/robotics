@@ -113,9 +113,13 @@ class FleetSimulator:
     def _move(self) -> None:
         occupied = {r.state.position: r.state.robot_id for r in self.robots.values() if r.state.status != "OFFLINE"}
         claims: dict[tuple[int, int], list[SimRobot]] = {}
+        proposed: dict[str, tuple[int, int]] = {}
         for r in self.robots.values():
             if r.task and r.state.status != "OFFLINE" and len(r.path) > 1:
-                claims.setdefault(r.path[1], []).append(r)
+                target = r.path[1]
+                if self.grid.is_passable(*target):
+                    proposed[r.state.robot_id] = target
+                    claims.setdefault(target, []).append(r)
         for target, claimants in claims.items():
             winner = min(claimants, key=lambda r: (-r.task.urgency, r.state.robot_id))
             for r in claimants:
@@ -128,7 +132,10 @@ class FleetSimulator:
                     if blocker.task is None:
                         alternatives = [
                             cell for cell in self.grid.neighbors(*blocker.state.position)
-                            if cell not in occupied and cell != target
+                            if cell not in occupied
+                            and cell != target
+                            and cell not in self.grid.dynamic_blocked
+                            and cell not in proposed.values()
                         ]
                         if alternatives:
                             new_cell = min(alternatives)
@@ -136,7 +143,18 @@ class FleetSimulator:
                             blocker.state.position = new_cell
                             blocker.state.status = "YIELDING"
                             occupied[new_cell] = blocking_id
-                if r is not winner or (target in occupied and occupied[target] != r.state.robot_id):
+                blocker_id = occupied.get(target)
+                moving_into_occupied = blocker_id and blocker_id != r.state.robot_id
+                swapping = (
+                    moving_into_occupied
+                    and proposed.get(blocker_id) == r.state.position
+                )
+                if (
+                    r is not winner
+                    or moving_into_occupied
+                    or swapping
+                    or target in self.grid.dynamic_blocked
+                ):
                     r.state.wait_ticks += 1
                     self.metrics.total_wait_ticks += 1
                     continue
